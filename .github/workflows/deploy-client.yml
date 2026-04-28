@@ -2,7 +2,7 @@ name: Deploy Game to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
@@ -30,9 +30,6 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload the Cocos Creator web build folder
-          # After building in Cocos Creator: Project > Build > Platform: Web Desktop
-          # The output is at: build/web-desktop/
           path: "build/web-desktop"
 
       - name: Deploy to GitHub Pages

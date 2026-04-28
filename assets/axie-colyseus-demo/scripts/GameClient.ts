@@ -20,9 +20,9 @@ const { ccclass, property } = _decorator;
 
 @ccclass("GameClient")
 export class GameClient extends Component {
-  @property hostname = "localhost"!;
-  @property port = 2567!;
-  @property useSSL = false!;
+  @property hostname = "tomatoes-shooting.onrender.com"!;
+  @property port = 443!;
+  @property useSSL = true!;
   @property gameRoom: string = "game_room"!;
 
   @property(Node) projectileTemplate: Node = null!;
