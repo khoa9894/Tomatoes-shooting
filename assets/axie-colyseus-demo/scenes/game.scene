@@ -116,9 +116,9 @@
     },
     "_enabled": true,
     "__prefab": null,
-    "hostname": "localhost",
-    "port": 2567,
-    "useSSL": false,
+    "hostname": "tomatoes-shooting.onrender.com",
+    "port": 443,
+    "useSSL": true,
     "gameRoom": "game_room",
     "projectileTemplate": {
       "__id__": 4
