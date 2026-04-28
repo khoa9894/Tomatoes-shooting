@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: axie-colyseus-server
+    env: node
+    region: singapore
+    plan: free
+    rootDir: server
+    buildCommand: npm install && npm run build
+    startCommand: node build/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
