@@ -48,6 +48,7 @@ export class GameClient extends Component {
   @property(Node) bubbleContainer: Node = null!;
   @property(Label) waitingLabel: Label = null!;
   @property(UIOpacity) allNode: UIOpacity = null!;
+  @property(UIOpacity) gameNode: UIOpacity = null!;
 
   client: Colyseus.Client = null;
   room: Colyseus.Room = null;
@@ -64,7 +65,7 @@ export class GameClient extends Component {
 
   private _trajectoryGraphics: Graphics = null;
   private _dotCount: number = 0;
-  private _baseText: string = "Waiting for opponent";
+  private _baseText: string = "Đang đợi đối thủ";
   private _tweenTimer: any = null;
 
   private _myMoveDirection: number = 0;
@@ -185,7 +186,11 @@ export class GameClient extends Component {
 
       this.room.state.players.onAdd(this.addNewPlayer.bind(this));
       this.room.state.listen("question", (value: string) => {
-        if (this.labelQuestion) this.labelQuestion.string = value;
+        if (!this.labelQuestion) return;
+        this.allGameTween(0, () => {
+          this.labelQuestion.string = value;
+          this.allGameTween(255);
+        });
       });
       this.room.state.listen("phase", (value) => {
         if (value == GamePhase.INGAME) {
@@ -421,11 +426,24 @@ export class GameClient extends Component {
     this.stopWaitingAnimation();
   }
 
-  allTween(opacity: number) {
-    tween(this.allNode)
-      .to(0.3, { opacity: opacity }, { easing: easing.smooth })
-      .start();
+  allTween(opacity: number, onComplete?: () => void) {
+    const t = tween(this.allNode).to(
+      0.3,
+      { opacity: opacity },
+      { easing: easing.smooth },
+    );
+    if (onComplete) t.call(onComplete);
+    t.start();
   }
 
+  allGameTween(opacity: number, onComplete?: () => void) {
+    const t = tween(this.gameNode).to(
+      0.3,
+      { opacity: opacity },
+      { easing: easing.smooth },
+    );
+    if (onComplete) t.call(onComplete);
+    t.start();
+  }
   updateEnterTurn(_newValue?: any, _prevValue?: any) {}
 }

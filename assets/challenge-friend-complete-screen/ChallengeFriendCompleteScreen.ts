@@ -140,7 +140,6 @@ export class ChallengeFriendCompleteScreen extends Component {
     this.vsOpacity.opacity = 0;
     this.resultOpacity.opacity = 0;
     this.vsOpacity.node.setScale(new Vec3(0, 0, 1));
-    this.closeButtonOpacity.node.setScale(new Vec3(0, 0, 1));
     this.resultOpacity.node.setScale(new Vec3(0, 0, 1));
 
     this.playerAvatarWithFlag.scoreLabel.string =
@@ -213,9 +212,7 @@ export class ChallengeFriendCompleteScreen extends Component {
                 },
               },
             ),
-            tween(this.closeButtonOpacity.node).to(0.3, {
-              scale: new Vec3(1, 1, 1),
-            }),
+
             tween(this.closeButtonOpacity).to(0.3, { opacity: 255 }),
           ),
         )
@@ -246,19 +243,19 @@ export class ChallengeFriendCompleteScreen extends Component {
       this.opponentAvatarWithFlag.updateState("lose");
       this.glow.spriteFrame = this.glowFrames[0];
       this.glow.node.active = true;
-      this.titleLabel.string = "Win";
+      this.titleLabel.string = "Chiến Thắng";
     } else if (isDraw) {
       this.playerAvatarWithFlag.updateState("lose");
       this.opponentAvatarWithFlag.updateState("lose");
       this.glow.spriteFrame = this.glowFrames[0];
       this.glow.node.active = true;
-      this.titleLabel.string = "Draw";
+      this.titleLabel.string = "Hòa";
     } else {
       this.playerAvatarWithFlag.updateState("lose");
       this.opponentAvatarWithFlag.updateState("win");
       this.glow.spriteFrame = this.glowFrames[0];
       this.glow.node.active = true;
-      this.titleLabel.string = "Lose";
+      this.titleLabel.string = "Thua";
     }
   }
 }
