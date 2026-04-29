@@ -10,7 +10,7 @@ import {
 } from "./schema/GameRoomState";
 
 export const GameRoomConfig = {
-  MOVE_SPEED: 150,
+  MOVE_SPEED: 250,
   FIELD_WIDTH: 1800,
   MAX_PLAYER: 2,
   GRAVITY: 1000,

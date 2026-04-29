@@ -1,8 +1,11 @@
 import {
   _decorator,
+  Color,
   Component,
   director,
+  easing,
   EventKeyboard,
+  Graphics,
   Input,
   input,
   instantiate,
@@ -12,10 +15,13 @@ import {
   Prefab,
   ProgressBar,
   sp,
+  tween,
+  UIOpacity,
 } from "cc";
 import Colyseus from "db://colyseus-sdk/colyseus.js";
 import { GamePhase } from "./GamePhases";
 import { Bubble } from "../../prefabs/Bubble";
+import { ChallengeFriendCompleteScreen } from "../../challenge-friend-complete-screen/ChallengeFriendCompleteScreen";
 const { ccclass, property } = _decorator;
 
 @ccclass("GameClient")
@@ -29,15 +35,19 @@ export class GameClient extends Component {
   @property(Node) projectileContainer: Node = null!;
   @property([sp.Skeleton]) axieSpines: sp.Skeleton[] = []!;
   @property(Label) labelQuestion: Label = null!; // replaces labelCountdown
-  @property(Label) labelCurrTurn: Label = null!; // reused as score display
+  @property(Label) playerCountdown: Label = null!;
+  @property(Label) opponentCountdown: Label = null!;
+  @property(Node) header: Node = null!;
   @property(ProgressBar) pbPowerRatio: ProgressBar = null!;
   @property(Node) meIndicator: Node = null!;
   @property(Node) oppIndicator: Node = null!;
   @property speedStakePower: number = 0.2!;
-  @property(Node) panelEnd: Node = null!;
-  @property(Label) labelEnd: Label = null!;
+  @property(ChallengeFriendCompleteScreen)
+  panelEnd: ChallengeFriendCompleteScreen = null!;
   @property(Prefab) bubblePrefab: Prefab = null!;
   @property(Node) bubbleContainer: Node = null!;
+  @property(Label) waitingLabel: Label = null!;
+  @property(UIOpacity) allNode: UIOpacity = null!;
 
   client: Colyseus.Client = null;
   room: Colyseus.Room = null;
@@ -51,6 +61,11 @@ export class GameClient extends Component {
   isStakingPower: boolean = false;
   myFaceDirection: number = 1;
   myIndex: number = 1;
+
+  private _trajectoryGraphics: Graphics = null;
+  private _dotCount: number = 0;
+  private _baseText: string = "Waiting for opponent";
+  private _tweenTimer: any = null;
 
   private _myMoveDirection: number = 0;
   public get myMoveDirection(): number {
@@ -80,6 +95,12 @@ export class GameClient extends Component {
     this.projectileTemplate.active = false;
     this.projectileContainer.active = false;
 
+    // Create trajectory preview graphics node in the same space as projectiles
+    const gNode = new Node("TrajectoryPreview");
+    this.projectileTemplate.parent.addChild(gNode);
+    this._trajectoryGraphics = gNode.addComponent(Graphics);
+    this._trajectoryGraphics.lineWidth = 0;
+
     // pre-instantiate bubble nodes – add to Root (same space as projectiles)
     if (this.bubblePrefab) {
       const root = this.projectileTemplate.parent;
@@ -90,6 +111,12 @@ export class GameClient extends Component {
         this.bubbleNodes.push(node);
       }
     }
+
+    // Hide game HUD while waiting for opponent
+    if (this.labelQuestion) this.labelQuestion.node.active = false;
+    if (this.header) this.header.active = false;
+    if (this.pbPowerRatio) this.pbPowerRatio.node.active = false;
+    this.startWaitingAnimation();
 
     // Instantiate Colyseus Client
     // connects into (ws|wss)://hostname[:port]
@@ -106,14 +133,51 @@ export class GameClient extends Component {
       this.powerRatio += dt * this.speedStakePower;
       this.powerRatio = Math.min(1, this.powerRatio);
       this.pbPowerRatio.progress = this.powerRatio;
+      this.drawTrajectory();
     } else {
       this.pbPowerRatio.progress = 0;
+      this._trajectoryGraphics?.clear();
+    }
+  }
+
+  private drawTrajectory() {
+    const g = this._trajectoryGraphics;
+    if (!g) return;
+    g.clear();
+
+    const axie = this.axieSpines[this.myIndex];
+    if (!axie) return;
+
+    let degAngle = this.myFaceDirection * 60;
+    if (degAngle < 0) degAngle += 180;
+    const radAngle = (Math.PI * degAngle) / 180;
+
+    const POWER_BASE = 2000;
+    const GRAVITY = 1000;
+    const STEP = 0.05;
+    const DOT_COUNT = 20;
+
+    let x = axie.node.position.x;
+    let y = 0;
+    let vx = Math.cos(radAngle) * this.powerRatio * POWER_BASE;
+    let vy = Math.sin(radAngle) * this.powerRatio * POWER_BASE;
+
+    for (let i = 1; i <= DOT_COUNT; i++) {
+      x += vx * STEP;
+      y += vy * STEP;
+      vy -= GRAVITY * STEP;
+      if (y < 0) break;
+      const alpha = Math.round(200 * (1 - i / DOT_COUNT));
+      const radius = Math.max(2, 8 - i * 0.35);
+      g.fillColor = new Color(255, 255, 255, alpha);
+      g.circle(x, y, radius);
+      g.fill();
     }
   }
 
   async connect() {
     try {
-      this.panelEnd.active = false;
+      this.panelEnd.node.active = false;
       this.room = await this.client.joinOrCreate(this.gameRoom);
 
       console.log("joined successfully!");
@@ -125,18 +189,37 @@ export class GameClient extends Component {
       });
       this.room.state.listen("phase", (value) => {
         if (value == GamePhase.INGAME) {
-          this.panelEnd.active = false;
+          this.panelEnd.node.active = false;
           this.isStakingPower = false;
-          if (this.labelQuestion) this.labelQuestion.string = "";
-          if (this.labelCurrTurn) this.labelCurrTurn.string = "0 - 0";
+          this.stopWaitingAnimation();
+          if (this.waitingLabel) this.waitingLabel.node.active = false;
+          if (this.labelQuestion) {
+            this.labelQuestion.node.active = true;
+            this.labelQuestion.string = "";
+          }
+          if (this.header) {
+            this.header.active = true;
+            this.playerCountdown.string = "0";
+            this.opponentCountdown.string = "0";
+          }
+          if (this.pbPowerRatio) this.pbPowerRatio.node.active = false;
         } else if (value == GamePhase.ENDED) {
-          this.panelEnd.active = true;
+          this.panelEnd.node.active = true;
+          this.allTween(0);
+          this.panelEnd.handleOpeningScreen(
+            this.room.state.players[this.myIndex]?.score ?? 0,
+            this.room.state.players[1 - this.myIndex]?.score ?? 0,
+          );
           let winnerSessionId = this.room.state.winner;
-          this.labelEnd.string =
-            winnerSessionId == this.room.sessionId ? "YOU WIN" : "YOU LOSE";
+
+          winnerSessionId == this.room.sessionId ? "YOU WIN" : "YOU LOSE";
         } else if (value == GamePhase.DRAW) {
-          this.panelEnd.active = true;
-          this.labelEnd.string = "GAME DRAW";
+          this.panelEnd.node.active = true;
+          this.allTween(0);
+          this.panelEnd.handleOpeningScreen(
+            this.room.state.players[this.myIndex]?.score ?? 0,
+            this.room.state.players[1 - this.myIndex]?.score ?? 0,
+          );
         }
       });
       this.room.onStateChange(this.onStateChange.bind(this));
@@ -186,11 +269,12 @@ export class GameClient extends Component {
 
     // update score label
     const p = state.players;
-    if (p && p.length >= 2 && this.labelCurrTurn) {
+    if (p && p.length >= 2 && this.header) {
       const myScore = p[this.myIndex]?.score ?? 0;
       const oppIndex = 1 - this.myIndex;
       const oppScore = p[oppIndex]?.score ?? 0;
-      this.labelCurrTurn.string = `You ${myScore} - ${oppScore} Opp`;
+      this.playerCountdown.string = myScore.toString();
+      this.opponentCountdown.string = oppScore.toString();
     }
   }
 
@@ -304,6 +388,44 @@ export class GameClient extends Component {
   }
 
   updateLabelCountdown() {}
+  startWaitingAnimation() {
+    this.stopWaitingAnimation();
+
+    const counter = { value: 0 };
+
+    this._tweenTimer = tween(counter)
+      .to(
+        0.5,
+        { value: 1 },
+        {
+          onComplete: () => {
+            this._dotCount = (this._dotCount % 3) + 1;
+            const dots = ".".repeat(this._dotCount);
+            this.waitingLabel.string = this._baseText + dots;
+          },
+        },
+      )
+      .union()
+      .repeatForever()
+      .start();
+  }
+
+  stopWaitingAnimation() {
+    if (this._tweenTimer) {
+      this._tweenTimer.stop();
+      this._tweenTimer = null;
+    }
+  }
+
+  onDestroy() {
+    this.stopWaitingAnimation();
+  }
+
+  allTween(opacity: number) {
+    tween(this.allNode)
+      .to(0.3, { opacity: opacity }, { easing: easing.smooth })
+      .start();
+  }
 
   updateEnterTurn(_newValue?: any, _prevValue?: any) {}
 }
