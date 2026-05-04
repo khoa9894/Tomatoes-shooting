@@ -208,6 +208,8 @@ export class GameClient extends Component {
             this.opponentCountdown.string = "0";
           }
           if (this.pbPowerRatio) this.pbPowerRatio.node.active = false;
+          // Fade gameNode lên lại khi câu hỏi mới đã được spawn
+          this.allGameTween(255);
         } else if (value == GamePhase.ENDED) {
           this.panelEnd.node.active = true;
           this.allTween(0);
@@ -225,6 +227,11 @@ export class GameClient extends Component {
             this.room.state.players[this.myIndex]?.score ?? 0,
             this.room.state.players[1 - this.myIndex]?.score ?? 0,
           );
+        } else if (value == GamePhase.WAITING_FOR_BUBBLE_CLEAR) {
+          // Fade gameNode về 0 rồi báo server để spawn câu hỏi mới
+          this.allGameTween(0, () => {
+            this.room.send("bubbles-cleared", {});
+          });
         }
       });
       this.room.onStateChange(this.onStateChange.bind(this));
@@ -392,7 +399,7 @@ export class GameClient extends Component {
     }
   }
 
-  updateLabelCountdown() {}
+  updateLabelCountdown() { }
   startWaitingAnimation() {
     this.stopWaitingAnimation();
 
@@ -445,5 +452,5 @@ export class GameClient extends Component {
     if (onComplete) t.call(onComplete);
     t.start();
   }
-  updateEnterTurn(_newValue?: any, _prevValue?: any) {}
+  updateEnterTurn(_newValue?: any, _prevValue?: any) { }
 }

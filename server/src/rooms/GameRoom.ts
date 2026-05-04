@@ -1,6 +1,9 @@
 import { Dispatcher } from "@colyseus/command";
 import { Client, Room } from "@colyseus/core";
 import { GamePhase } from "./GamePhases";
+
+// Thêm phase mới vào GamePhase nếu chưa có trong GamePhases.ts
+// Xóa enum GameRoomPhase, chỉ dùng GamePhase
 import { CmdFire, CmdStartMove, CmdStopMove } from "./commands/GameRoomCmd";
 import {
   BubbleState,
@@ -101,7 +104,10 @@ export class GameRoom extends Room<GameRoomState> {
 
     this.onMessage("start-move", this.handleStartMoveMsg.bind(this));
     this.onMessage("stop-move", this.handleStopMoveMsg.bind(this));
+
     this.onMessage("fire", this.handleFireMsg.bind(this));
+    // Nhận message từ client báo đã tween xong
+    this.onMessage("bubbles-cleared", this.handleBubblesCleared.bind(this));
 
     this.setSimulationInterval(this.update.bind(this));
   }
@@ -205,7 +211,9 @@ export class GameRoom extends Room<GameRoomState> {
           if (this.state.questionIndex >= GameRoomConfig.ROUNDS) {
             this.endGame();
           } else {
-            this.spawnQuestion();
+            // Đổi phase, chờ client tween bubble về 0
+            this.state.phase = GamePhase.WAITING_FOR_BUBBLE_CLEAR;
+            // Không gọi spawnQuestion ở đây
           }
         }
         return true;
@@ -222,7 +230,17 @@ export class GameRoom extends Room<GameRoomState> {
     else if (p1.score > p0.score) this.state.winner = p1.sessionId;
     // else draw (winner stays empty)
     this.state.phase = p0.score === p1.score ? GamePhase.DRAW : GamePhase.ENDED;
+
   }
+
+  // Khi client báo tween xong thì spawn câu hỏi mới
+  handleBubblesCleared(client: Client, msg: any) {
+    if (this.state.phase === GamePhase.WAITING_FOR_BUBBLE_CLEAR) {
+      this.state.phase = GamePhase.INGAME;
+      this.spawnQuestion();
+    }
+  }
+
 
   update(msDt: number) {
     const secDt = msDt / 1000;
@@ -261,3 +279,4 @@ export class GameRoom extends Room<GameRoomState> {
     });
   }
 }
+

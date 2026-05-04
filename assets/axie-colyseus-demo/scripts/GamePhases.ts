@@ -2,5 +2,6 @@ export enum GamePhase {
     WAITING,
     INGAME,
     ENDED,
-    DRAW
+    DRAW,
+    WAITING_FOR_BUBBLE_CLEAR
 }

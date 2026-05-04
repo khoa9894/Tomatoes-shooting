@@ -4,10 +4,12 @@ exports.GameRoom = exports.GameRoomConfig = void 0;
 const command_1 = require("@colyseus/command");
 const core_1 = require("@colyseus/core");
 const GamePhases_1 = require("./GamePhases");
+// Thêm phase mới vào GamePhase nếu chưa có trong GamePhases.ts
+// Xóa enum GameRoomPhase, chỉ dùng GamePhase
 const GameRoomCmd_1 = require("./commands/GameRoomCmd");
 const GameRoomState_1 = require("./schema/GameRoomState");
 exports.GameRoomConfig = {
-    MOVE_SPEED: 150,
+    MOVE_SPEED: 250,
     FIELD_WIDTH: 1800,
     MAX_PLAYER: 2,
     GRAVITY: 1000,
@@ -89,6 +91,8 @@ class GameRoom extends core_1.Room {
         this.onMessage("start-move", this.handleStartMoveMsg.bind(this));
         this.onMessage("stop-move", this.handleStopMoveMsg.bind(this));
         this.onMessage("fire", this.handleFireMsg.bind(this));
+        // Nhận message từ client báo đã tween xong
+        this.onMessage("bubbles-cleared", this.handleBubblesCleared.bind(this));
         this.setSimulationInterval(this.update.bind(this));
     }
     onJoin(client, options) {
@@ -122,13 +126,20 @@ class GameRoom extends core_1.Room {
         this.state.phase = GamePhases_1.GamePhase.ENDED;
     }
     handleStartMoveMsg(client, msg) {
-        this.dispatcher.dispatch(new GameRoomCmd_1.CmdStartMove(), { client, direction: msg.direction });
+        this.dispatcher.dispatch(new GameRoomCmd_1.CmdStartMove(), {
+            client,
+            direction: msg.direction,
+        });
     }
     handleStopMoveMsg(client, msg) {
         this.dispatcher.dispatch(new GameRoomCmd_1.CmdStopMove(), { client });
     }
     handleFireMsg(client, msg) {
-        this.dispatcher.dispatch(new GameRoomCmd_1.CmdFire(), { client, degAngle: msg.angle, powerRatio: msg.powerRatio });
+        this.dispatcher.dispatch(new GameRoomCmd_1.CmdFire(), {
+            client,
+            degAngle: msg.angle,
+            powerRatio: msg.powerRatio,
+        });
     }
     spawnQuestion() {
         const q = this.questionQueue[this.state.questionIndex];
@@ -148,34 +159,40 @@ class GameRoom extends core_1.Room {
             b.text = String(val);
             b.isCorrect = val === q.answer;
             b.x = -800 + col * 400 + randInt(-60, 60);
-            b.y = 80 + row * 220 + randInt(-30, 30);
+            b.y = 150 + row * 220 + randInt(-30, 30);
             b.active = true;
         });
     }
-    // Called by CmdFire when a projectile lands
+    // Returns true if a bubble was hit (projectile should stop)
     checkBubbleHit(proj, shooterSessionId) {
+        if (proj.hasHit)
+            return true; // already used
         for (const b of this.state.bubbles) {
             if (!b.active)
                 continue;
             const dist = Math.sqrt((proj.x - b.x) ** 2 + (proj.y - b.y) ** 2);
-            if (dist <= exports.GameRoomConfig.HIT_RADIUS * 1.5) {
-                b.active = false;
+            if (dist <= 65) {
+                b.active = false; // bubble disappears immediately
+                proj.hasHit = true; // mark projectile as spent
+                proj.active = false; // remove projectile immediately
                 if (b.isCorrect) {
-                    const player = this.state.players.find(p => p.sessionId === shooterSessionId);
+                    const player = this.state.players.find((p) => p.sessionId === shooterSessionId);
                     if (player)
                         player.score += 1;
                     this.state.questionIndex += 1;
                     if (this.state.questionIndex >= exports.GameRoomConfig.ROUNDS) {
-                        // end game - highest score wins
                         this.endGame();
                     }
                     else {
-                        this.spawnQuestion();
+                        // Đổi phase, chờ client tween bubble về 0
+                        this.state.phase = GamePhases_1.GamePhase.WAITING_FOR_BUBBLE_CLEAR;
+                        // Không gọi spawnQuestion ở đây
                     }
                 }
-                break; // only one bubble per projectile
+                return true;
             }
         }
+        return false;
     }
     endGame() {
         const p0 = this.state.players[0];
@@ -188,6 +205,13 @@ class GameRoom extends core_1.Room {
             this.state.winner = p1.sessionId;
         // else draw (winner stays empty)
         this.state.phase = p0.score === p1.score ? GamePhases_1.GamePhase.DRAW : GamePhases_1.GamePhase.ENDED;
+    }
+    // Khi client báo tween xong thì spawn câu hỏi mới
+    handleBubblesCleared(client, msg) {
+        if (this.state.phase === GamePhases_1.GamePhase.WAITING_FOR_BUBBLE_CLEAR) {
+            this.state.phase = GamePhases_1.GamePhase.INGAME;
+            this.spawnQuestion();
+        }
     }
     update(msDt) {
         const secDt = msDt / 1000;
@@ -213,7 +237,9 @@ class GameRoom extends core_1.Room {
                 proj.y += proj.vy * secDt;
                 proj.vy -= exports.GameRoomConfig.GRAVITY * secDt;
                 // check bubble hit while flying
-                this.checkBubbleHit(proj, player.sessionId);
+                const hit = this.checkBubbleHit(proj, player.sessionId);
+                if (hit)
+                    return; // projectile already deactivated
                 if (proj.y < 0) {
                     proj.y = 0;
                     proj.vx = 0;

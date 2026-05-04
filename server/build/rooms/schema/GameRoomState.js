@@ -18,6 +18,7 @@ class Projectile extends schema_1.Schema {
         this.vx = 0;
         this.vy = 0;
         this.landTimer = 0;
+        this.hasHit = false; // true after hitting a bubble
     }
 }
 exports.Projectile = Projectile;
@@ -39,6 +40,9 @@ __decorate([
 __decorate([
     (0, schema_1.type)("number")
 ], Projectile.prototype, "landTimer", void 0);
+__decorate([
+    (0, schema_1.type)("boolean")
+], Projectile.prototype, "hasHit", void 0);
 class BubbleState extends schema_1.Schema {
     constructor() {
         super(...arguments);
